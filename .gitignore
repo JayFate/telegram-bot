@@ -1,1 +1,4 @@
-telegram-bot
+# telegram-bot
+node_modules
+*.mp3
+pnpm-lock.yaml
