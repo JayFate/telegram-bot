@@ -1,74 +1,86 @@
-const { glob } = require('glob');
+const axios = require('axios');
+const FormData = require('form-data');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const { execSync } = require('child_process');
+require('dotenv').config();
 
-const GROQ_API_KEY = 'gsk_aaa';
-const API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
-const DEEPSEEK_API_KEY = 'ai-aaa';
-const DEEPSEEK_API_URL = 'https://ai.gengjiawen.com/api/openai/v1/chat/completions';
+// 环境变量检查
+const requiredEnvVars = ['GROQ_API_KEY', 'GPT_API_KEY', 'GROQ_API_URL', 'GPT_API_URL'];
+for (const envVar of requiredEnvVars) {
+    if (!process.env[envVar]) {
+        throw new Error(`Missing required environment variable: ${envVar}`);
+    }
+}
 
-async function segmentText(text) {
-    // text = text.slice(0, 200)
+// 音频转文本
+async function audioToText(audioPath) {
     try {
-        // 将文本内容写入临时文件，避免命令行长度限制
-        const tempInputPath = './temp_input.json';
-        const requestBody = JSON.stringify({
-            model: 'deepseek-v3',
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(audioPath));
+        formData.append('model', 'whisper-large-v3-turbo');
+        formData.append('temperature', '0');
+        formData.append('language', 'zh');
+        formData.append('response_format', 'json');
+
+        const response = await axios.post(process.env.GROQ_API_URL, formData, {
+            headers: {
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                ...formData.getHeaders(),
+            },
+        });
+
+        return response.data.text;
+    } catch (error) {
+        console.error('音频转文本失败:', error.response?.data || error.message);
+        throw error;
+    }
+}
+
+// 文本分段
+async function segmentText(text) {
+    try {
+        const response = await axios.post(process.env.GPT_API_URL, {
+            model: 'gpt-4o',
             messages: [
                 {
                     role: 'system',
-                    content: '你是一个文本分段助手。请将输入的文本按照语义和段落进行合理分段，保持原文的完整性。每个段落用换行符分隔。'
+                    content: '你是一个专业的文本编辑，你的任务是对文本进行结构化整理，但必须严格保持原文的完整性。不要删除、缩减或改写任何内容。'
                 },
                 {
                     role: 'user',
-                    content: text
+                    content: `请对以下文本进行结构化整理：
+1. 仔细分析文本的主题和内容结构
+2. 在适当的位置添加段落标题，使文本层次更清晰
+3. 使用换行符分隔不同段落
+4. 严格保持原文的每一个字，不要删减或修改任何内容
+5. 确保分段后的文本与原文完全一致，只是增加了结构化的标题和段落划分
+
+原文内容：
+${text}`
                 }
             ],
-            temperature: 0.7,
-        }, null, 2);  // 使用缩进格式化 JSON
-
-        console.log('正在写入请求数据到临时文件...');
-        await fsPromises.writeFile(tempInputPath, requestBody);
-        console.log('临时文件写入完成:', tempInputPath);
-
-        const curlCommand = `curl "${DEEPSEEK_API_URL}" \\
-            -H "Content-Type: application/json" \\
-            -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \\
-            -d @${tempInputPath}`;
-
-        console.log('\n执行 curl 命令:', curlCommand);
-        const result = execSync(curlCommand, {
-            stdio: ['pipe', 'pipe', 'inherit'],
-            encoding: 'utf-8',
-            maxBuffer: 10 * 1024 * 1024  // 增加缓冲区大小到 10MB
+            temperature: 0.3,
+            max_tokens: 4000
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.GPT_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
         });
-        console.log('\nAPI 调用完成，正在解析响应...');
 
-        // 清理临时文件
-        await fsPromises.unlink(tempInputPath);
-        console.log('临时文件已删除:', tempInputPath);
-
-        try {
-            const jsonResult = JSON.parse(result);
-            const segmentedText = jsonResult.choices[0].message.content;
-            console.log('\n文本分段成功，分段数:', segmentedText.split('\n').length);
-            return segmentedText;
-        } catch (parseError) {
-            console.error('API 响应解析失败。响应内容:', result.slice(0, 500));
-            console.error('解析错误:', parseError.message);
-            return text;
-        }
+        const segmentedContent = response.data.choices[0].message.content;
+        
+        // 添加标题和格式说明
+        return `# 视频内容文本整理\n\n` +
+            `> 以下是经过AI助手整理的视频内容文本，已按主题分段并添加标题。\n\n` +
+            `---\n\n${segmentedContent}\n\n` +
+            `---\n\n` +
+            `> 注：本文本由AI助手自动生成，如有需要请参考原始文本。`;
     } catch (error) {
-        console.error('文本分段处理时出错:', error.message);
-        if (error.stdout) {
-            console.error('API 响应:', error.stdout.slice(0, 500));
-        }
-        if (error.stderr) {
-            console.error('错误输出:', error.stderr);
-        }
-        return text;
+        console.error('文本分段失败:', error.response?.data || error.message);
+        throw error;
     }
 }
 
@@ -76,7 +88,7 @@ async function transcribeAudio(filePath) {
     try {
         const tempOutputPath = `${filePath}.temp.json`;
         const curlCommand = `curl https://api.groq.com/openai/v1/audio/transcriptions \\
-            -H "Authorization: Bearer ${GROQ_API_KEY}" \\
+            -H "Authorization: Bearer ${process.env.GROQ_API_KEY}" \\
             -F "file=@${filePath}" \\
             -F model=whisper-large-v3-turbo \\
             -F temperature=0 \\
@@ -164,3 +176,8 @@ async function main() {
 }
 
 main();
+
+module.exports = {
+    audioToText,
+    segmentText
+};

@@ -4,6 +4,22 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const os = require('os');
+require('dotenv').config();
+
+// 环境变量检查
+const requiredEnvVars = [
+    'TELEGRAM_BOT_TOKEN',
+    'GROQ_API_KEY',
+    'GPT_API_KEY',
+    'GROQ_API_URL',
+    'GPT_API_URL'
+];
+
+for (const envVar of requiredEnvVars) {
+    if (!process.env[envVar]) {
+        throw new Error(`Missing required environment variable: ${envVar}`);
+    }
+}
 
 // 根据操作系统选择 yt-dlp 可执行文件
 const YT_DLP = os.platform() === 'darwin' ? './utils/yt-dlp_macos' : './utils/yt-dlp_linux';
@@ -18,9 +34,11 @@ try {
 
 // 配置
 const CONFIG = {
-    TELEGRAM_TOKEN: 'aaaa:bbbb',
-    GROQ_API_KEY: 'gsk_aaaaaa',
-    GPT_API_KEY: 'ai-aaaaaa',
+    TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+    GROQ_API_KEY: process.env.GROQ_API_KEY,
+    GPT_API_KEY: process.env.GPT_API_KEY,
+    GROQ_API_URL: process.env.GROQ_API_URL,
+    GPT_API_URL: process.env.GPT_API_URL,
     MAX_FILE_SIZE: 45 * 1024 * 1024, // 45MB
     URL_EXPIRE_TIME: 5 * 60 * 1000,   // 5 minutes
     SEND_DELAY: 3000,                 // 3 seconds
@@ -284,7 +302,7 @@ async function convertAudioToText(audioPath, chatId, messageId) {
         }
 
         console.log('开始转换音频为文本...');
-        const curlCommand = `curl https://api.groq.com/openai/v1/audio/transcriptions \\
+        const curlCommand = `curl ${CONFIG.GROQ_API_URL} \\
             -H "Authorization: Bearer ${CONFIG.GROQ_API_KEY}" \\
             -F "file=@${audioPath}" \\
             -F model=whisper-large-v3-turbo \\
@@ -340,7 +358,7 @@ async function segmentText(text) {
         // 转义文本中的特殊字符
         const escapedText = text.replace(/[\\"']/g, '\\$&').replace(/\n/g, '\\n');
         
-        const curlCommand = `curl -X POST https://ai.gengjiawen.com/api/openai/v1/chat/completions \\
+        const curlCommand = `curl -X POST ${CONFIG.GPT_API_URL} \\
             -H "Authorization: Bearer ${CONFIG.GPT_API_KEY}" \\
             -H "Content-Type: application/json" \\
             -d '{

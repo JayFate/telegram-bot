@@ -1,5 +1,12 @@
-# telegram-bot
-node_modules
+# Environment variables
+.env
+.env.*
+
+# Directories
+youtube-video/
+youtube-audio/
+youtube-text/
+node_modules/
 *.mp3
 pnpm-lock.yaml
 
