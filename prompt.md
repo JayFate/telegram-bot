@@ -28,3 +28,36 @@ yt-dlp 命令参考
 
 
 优化包含 下载，转为音频，转为文字，分段文字 的选择菜单，使得菜单呈两列布局
+
+
+
+git config --global user.name "JayFate" &&
+git config --global user.email "37610029@qq.com" &&
+ssh-keygen -t rsa -C "37610029@qq.com"
+
+
+
+
+
+从零重新实现 download-yt-dlp.sh，使其能适配 Ubuntu、Debian和 macOS，在 download-yt-dlp.sh 中执行下面的操作，每次安装程序的时候注意区分当前系统，不同系统的安装方式不同。
+
+1. mkdir -p ~/yt-dlp
+2. 执行 curl -o /yt-dlp/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/download/2025.01.26/yt-dlp_linux  注意把其中的 2025.01.26 换成当前的年月日，如果下载失败则使用前一天的年月日，依次尝试直到下载成功。如果是 macOS 系统，把链接的后缀改成 _macos
+3. 执行chmod +x /yt-dlp/yt-dlp
+4. 执行sudo apt update && sudo apt install ffmpeg，如果是 macOS 使用 brew 安装 ffmpeg
+5. 安装 rust 和 cargo 开发环境
+6. 安装 nodejs v22，Python3，安装 npm
+7. 安装 n, pnpm
+8. 执行 cargo install trxx 
+
+
+
+
+
+
+
+给我的机器人增加一个本地持久化的鉴权机制，
+
+当用户给机器人发送任何消息，机器人回复  你好，请登录
+
+当用户给机器人发送  你真是个大帅比，鉴权通过，能够正常使用后续的下载、文本分段等功能，并且该用户之后都不需要鉴权了

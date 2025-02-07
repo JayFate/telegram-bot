@@ -9,7 +9,7 @@ require('dotenv').config();
 // 环境变量检查
 const requiredEnvVars = [
     'TELEGRAM_BOT_TOKEN',
-    'GROQ_API_KEY',
+    'GROQ_API_KEYS',
     'GPT_API_KEY',
     'GROQ_API_URL',
     'GPT_API_URL'
@@ -21,8 +21,73 @@ for (const envVar of requiredEnvVars) {
     }
 }
 
-// 根据操作系统选择 yt-dlp 可执行文件
-const YT_DLP = os.platform() === 'darwin' ? './utils/yt-dlp_macos' : './utils/yt-dlp_linux';
+// 解析 GROQ API Keys
+const GROQ_API_KEYS = process.env.GROQ_API_KEYS.split(',').map(key => key.trim()).filter(Boolean);
+if (GROQ_API_KEYS.length === 0) {
+    throw new Error('No valid GROQ API Keys found');
+}
+
+// 获取随机 GROQ API Key
+const getRandomGroqApiKey = () => {
+    const randomIndex = Math.floor(Math.random() * GROQ_API_KEYS.length);
+    return GROQ_API_KEYS[randomIndex];
+};
+
+// 使用统一的 yt-dlp 路径
+const YT_DLP = path.join(os.homedir(), 'yt-dlp', 'yt-dlp');
+
+// 用户数据文件路径
+const USERS_DATA_FILE = path.join(__dirname, '..', 'data', 'users.json');
+
+// 确保用户数据目录存在
+const ensureUserDataDir = () => {
+    const dataDir = path.dirname(USERS_DATA_FILE);
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+    }
+};
+
+// 读取用户数据
+const loadUsers = () => {
+    ensureUserDataDir();
+    try {
+        if (fs.existsSync(USERS_DATA_FILE)) {
+            const data = fs.readFileSync(USERS_DATA_FILE, 'utf8');
+            return JSON.parse(data);
+        }
+        return {};
+    } catch (error) {
+        console.error('读取用户数据失败:', error);
+        return {};
+    }
+};
+
+// 保存用户数据
+const saveUsers = (users) => {
+    ensureUserDataDir();
+    try {
+        fs.writeFileSync(USERS_DATA_FILE, JSON.stringify(users, null, 2));
+    } catch (error) {
+        console.error('保存用户数据失败:', error);
+    }
+};
+
+// 检查用户是否已授权
+const isUserAuthorized = (userId) => {
+    const users = loadUsers();
+    return users[userId]?.authorized === true;
+};
+
+// 授权用户
+const authorizeUser = (userId, username) => {
+    const users = loadUsers();
+    users[userId] = {
+        authorized: true,
+        username: username,
+        authorizedAt: new Date().toISOString()
+    };
+    saveUsers(users);
+};
 
 // 检查并设置可执行权限
 try {
@@ -35,7 +100,6 @@ try {
 // 配置
 const CONFIG = {
     TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
-    GROQ_API_KEY: process.env.GROQ_API_KEY,
     GPT_API_KEY: process.env.GPT_API_KEY,
     GROQ_API_URL: process.env.GROQ_API_URL,
     GPT_API_URL: process.env.GPT_API_URL,
@@ -50,6 +114,7 @@ const CONFIG = {
 文本内容如下：
 `,
     CLEANUP_DELAY: 5 * 60 * 1000, // 5 minutes
+    AUTH_MESSAGE: '你真是个大帅比'
 };
 
 // 创建 bot 实例
@@ -245,7 +310,8 @@ async function scheduleFileCleanup(filePath, delay = CONFIG.CLEANUP_DELAY) {
 async function downloadVideo(url, chatId, messageId) {
     try {
         const outputTemplate = `./youtube-video/${chatId}/aaa-${messageId}.%(ext)s`;
-        const command = `${YT_DLP} -f "bv*+ba/b" -o "${outputTemplate}" "${url}"`;
+        const cookiesPath = path.join(os.homedir(), 'yt-dlp', 'cookies.txt');
+        const command = `${YT_DLP} --cookies "${cookiesPath}" -o "${outputTemplate}" "${url}"`;
         
         console.log('开始下载视频...');
         console.log('执行命令:', command);
@@ -272,7 +338,8 @@ async function downloadAudio(url, chatId, messageId, isForText = false) {
     try {
         const outputDir = isForText ? 'youtube-text' : 'youtube-audio';
         const outputTemplate = `./${outputDir}/${chatId}/aaa-${messageId}.%(ext)s`;
-        const command = `${YT_DLP} -x --audio-format mp3 -o "${outputTemplate}" "${url}"`;
+        const cookiesPath = path.join(os.homedir(), 'yt-dlp', 'cookies.txt');
+        const command = `${YT_DLP} -x --audio-format mp3 --cookies "${cookiesPath}" -o "${outputTemplate}" "${url}"`;
         
         console.log('开始下载音频...');
         console.log('执行命令:', command);
@@ -303,7 +370,7 @@ async function convertAudioToText(audioPath, chatId, messageId) {
 
         console.log('开始转换音频为文本...');
         const curlCommand = `curl ${CONFIG.GROQ_API_URL} \\
-            -H "Authorization: Bearer ${CONFIG.GROQ_API_KEY}" \\
+            -H "Authorization: Bearer ${getRandomGroqApiKey()}" \\
             -F "file=@${audioPath}" \\
             -F model=whisper-large-v3-turbo \\
             -F temperature=0 \\
@@ -531,13 +598,29 @@ async function handleUserChoice(choice, url, chatId, messageId) {
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const messageText = msg.text;
+    const userId = msg.from.id;
+    const username = msg.from.username;
 
     console.log('收到消息:', {
-        from: msg.from.username,
+        from: username,
         text: messageText,
-        chatId: chatId
+        chatId: chatId,
+        userId: userId
     });
 
+    // 检查用户是否已授权
+    if (!isUserAuthorized(userId)) {
+        if (messageText === CONFIG.AUTH_MESSAGE) {
+            authorizeUser(userId, username);
+            await bot.sendMessage(chatId, '授权成功！现在您可以使用所有功能了。');
+            return;
+        } else {
+            await bot.sendMessage(chatId, '你好，请登录');
+            return;
+        }
+    }
+
+    // 已授权用户的消息处理
     if (messageText && isYouTubeUrl(messageText)) {
         // 为 URL 生成一个短 ID
         const urlId = generateShortId();
@@ -565,8 +648,6 @@ bot.on('message', async (msg) => {
             urlMap.delete(urlId);
             console.log(`已清理 URL ID: ${urlId}`);
         }, CONFIG.URL_EXPIRE_TIME);
-    } else if (messageText && messageText.includes('你好')) {
-        await bot.sendMessage(chatId, '你真是个大帅比');
     }
 });
 
