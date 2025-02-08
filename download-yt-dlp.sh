@@ -56,7 +56,6 @@ else
 
     # 获取当前日期并尝试下载
     echo "开始下载 yt-dlp..."
-    current_date=$(date +%Y.%m.%d)
     success=false
 
     # 尝试下载，最多尝试 100 天
@@ -66,9 +65,10 @@ else
             try_date=$(date -v-${i}d +%Y.%m.%d)
         else
             # Linux 日期处理
-            try_date=$(date -d "$current_date - $i days" +%Y.%m.%d)
+            try_date=$(date -d "$i days ago" +%Y.%m.%d)
         fi
         
+        echo "正在尝试第 $((i+1)) 天前的版本..."
         if download_yt_dlp "$try_date"; then
             success=true
             break
@@ -121,6 +121,23 @@ if ! check_installed python3; then
         brew install python3 || echo "警告: Python3 安装失败"
     else
         sudo apt update && sudo apt install -y python3 python3-pip build-essential || echo "警告: Python3 安装失败"
+    fi
+fi
+
+# 检查并安装 git
+echo "检查 git..."
+if ! check_installed git; then
+    echo "安装 git..."
+    if [ "$OS" = "Darwin" ]; then
+        if ! command -v brew &> /dev/null; then
+            echo "安装 Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+                echo "警告: Homebrew 安装失败，跳过 git 安装"
+            }
+        fi
+        brew install git || echo "警告: git 安装失败"
+    else
+        sudo apt update && sudo apt install -y git || echo "警告: git 安装失败"
     fi
 fi
 
