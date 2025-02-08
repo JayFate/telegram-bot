@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 一键安装命令：
-# curl -fsSL https://raw.githubusercontent.com/JayFate/trxx/main/download-yt-dlp.sh | bash
+# curl -fsSL https://raw.githubusercontent.com/JayFate/telegram-bot/main/download-yt-dlp.sh | bash
 
 # 检测操作系统
 OS="$(uname)"
@@ -26,7 +26,9 @@ if [ -d ~/yt-dlp ]; then
     echo "yt-dlp 目录已存在"
 else
     echo "创建 yt-dlp 目录..."
-    mkdir -p ~/yt-dlp
+    mkdir -p ~/yt-dlp || {
+        echo "警告: 创建 yt-dlp 目录失败"
+    }
 fi
 
 # 检查 yt-dlp 是否已安装
@@ -75,13 +77,12 @@ else
     done
 
     if [ "$success" = false ]; then
-        echo "错误: 所有版本尝试后仍未能下载 yt-dlp"
-        exit 1
+        echo "警告: 所有版本尝试后仍未能下载 yt-dlp，将继续安装其他组件"
+    else
+        # 设置执行权限
+        echo "设置执行权限..."
+        chmod +x ~/yt-dlp/yt-dlp || echo "警告: 设置执行权限失败"
     fi
-
-    # 设置执行权限
-    echo "设置执行权限..."
-    chmod +x ~/yt-dlp/yt-dlp
 fi
 
 # 检查并安装 ffmpeg
@@ -91,11 +92,14 @@ if ! check_installed ffmpeg; then
     if [ "$OS" = "Darwin" ]; then
         if ! command -v brew &> /dev/null; then
             echo "安装 Homebrew..."
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+                echo "警告: Homebrew 安装失败，跳过 ffmpeg 安装"
+                continue
+            }
         fi
-        brew install ffmpeg
+        brew install ffmpeg || echo "警告: ffmpeg 安装失败"
     else
-        sudo apt update && sudo apt install -y ffmpeg
+        sudo apt update && sudo apt install -y ffmpeg || echo "警告: ffmpeg 安装失败"
     fi
 fi
 
@@ -103,8 +107,10 @@ fi
 echo "检查 Rust 和 Cargo..."
 if ! check_installed cargo; then
     echo "安装 Rust 和 Cargo..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source "$HOME/.cargo/env"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y || {
+        echo "警告: Rust 安装失败"
+    }
+    source "$HOME/.cargo/env" || echo "警告: 加载 Rust 环境失败"
 fi
 
 # 检查并安装 Python3
@@ -112,12 +118,9 @@ echo "检查 Python3..."
 if ! check_installed python3; then
     echo "安装基础开发工具..."
     if [ "$OS" = "Darwin" ]; then
-        brew install python3
+        brew install python3 || echo "警告: Python3 安装失败"
     else
-        sudo apt update && sudo apt install -y \
-            python3 \
-            python3-pip \
-            build-essential
+        sudo apt update && sudo apt install -y python3 python3-pip build-essential || echo "警告: Python3 安装失败"
     fi
 fi
 
@@ -125,9 +128,11 @@ fi
 echo "检查 nvm..."
 if [ ! -d "$HOME/.nvm" ]; then
     echo "安装 nvm..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash || {
+        echo "警告: nvm 安装失败"
+    }
     export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" || echo "警告: nvm 环境加载失败"
 fi
 
 # 检查并安装 Node.js 22
@@ -136,9 +141,9 @@ if ! command -v node &> /dev/null || [[ "$(node -v)" != v22* ]]; then
     echo "安装 Node.js 22..."
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm install 22
-    nvm use 22
-    nvm alias default 22
+    nvm install 22 || echo "警告: Node.js 22 安装失败"
+    nvm use 22 || echo "警告: 切换到 Node.js 22 失败"
+    nvm alias default 22 || echo "警告: 设置 Node.js 22 为默认版本失败"
 else
     echo "Node.js 22 已安装"
 fi
@@ -147,40 +152,41 @@ fi
 echo "检查 n..."
 if ! check_installed n; then
     echo "安装 n..."
-    sudo npm install -g n
+    sudo npm install -g n || {
+        echo "警告: n 安装失败"
+    }
     # 设置 n 的安装目录为用户目录
     export N_PREFIX="$HOME/.n"
-    echo 'export N_PREFIX="$HOME/.n"' >> ~/.bashrc
-    echo 'export PATH="$N_PREFIX/bin:$PATH"' >> ~/.bashrc
-    source ~/.bashrc
+    {
+        echo 'export N_PREFIX="$HOME/.n"' >> ~/.bashrc
+        echo 'export PATH="$N_PREFIX/bin:$PATH"' >> ~/.bashrc
+        source ~/.bashrc
+    } || echo "警告: n 环境配置失败"
 fi
 
 # 检查并安装 pnpm
 echo "检查 pnpm..."
 if ! check_installed pnpm; then
     echo "安装 pnpm..."
-    npm install -g pnpm
+    npm install -g pnpm || echo "警告: pnpm 安装失败"
 fi
 
 # 检查并安装 trxx
 echo "检查 trxx..."
 if ! check_installed trxx; then
     echo "安装 trxx..."
-    if ! cargo install trxx; then
-        echo "警告: trxx 安装失败"
-        exit 1
-    fi
+    cargo install trxx || echo "警告: trxx 安装失败"
 fi
 
 # 显示安装的版本信息
-echo "环境信息:"
+echo -e "\n安装完成，环境信息:"
 echo "操作系统: $OS"
-echo "Node.js 版本: $(node -v)"
-echo "npm 版本: $(npm -v)"
-echo "pnpm 版本: $(pnpm -v)"
-echo "n 版本: $(n --version)"
-echo "Python 版本: $(python3 --version)"
-echo "Rust 版本: $(rustc --version)"
-echo "Cargo 版本: $(cargo --version)"
+command -v node &> /dev/null && echo "Node.js 版本: $(node -v)" || echo "Node.js: 未安装"
+command -v npm &> /dev/null && echo "npm 版本: $(npm -v)" || echo "npm: 未安装"
+command -v pnpm &> /dev/null && echo "pnpm 版本: $(pnpm -v)" || echo "pnpm: 未安装"
+command -v n &> /dev/null && echo "n 版本: $(n --version)" || echo "n: 未安装"
+command -v python3 &> /dev/null && echo "Python 版本: $(python3 --version)" || echo "Python3: 未安装"
+command -v rustc &> /dev/null && echo "Rust 版本: $(rustc --version)" || echo "Rust: 未安装"
+command -v cargo &> /dev/null && echo "Cargo 版本: $(cargo --version)" || echo "Cargo: 未安装"
 
-echo "所有操作完成!"
+echo -e "\n脚本执行完成！"
