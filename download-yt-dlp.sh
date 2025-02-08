@@ -10,6 +10,43 @@ if [ "$OS" != "Darwin" ] && [ "$OS" != "Linux" ]; then
     exit 1
 fi
 
+# 在 macOS 上安装 iTerm2
+if [ "$OS" = "Darwin" ]; then
+    echo "检查 iTerm2..."
+    if ! [ -d "/Applications/iTerm.app" ]; then
+        echo "安装 iTerm2..."
+        if ! command -v brew &> /dev/null; then
+            echo "安装 Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+                echo "警告: Homebrew 安装失败，跳过 iTerm2 安装"
+            }
+        fi
+        
+        if command -v brew &> /dev/null; then
+            brew install --cask iterm2 || echo "警告: iTerm2 安装失败"
+            
+            # 配置 iTerm2 的一些基本设置
+            # 创建配置目录
+            defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
+            defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$HOME/.iterm2"
+            mkdir -p "$HOME/.iterm2"
+            
+            # 配置一些常用的 iTerm2 设置
+            # 启用自动切换主题（根据系统暗色/亮色模式）
+            defaults write com.googlecode.iterm2 DimOnlyText -bool true
+            # 启用命令历史
+            defaults write com.googlecode.iterm2 SavePasteHistory -bool true
+            # 设置窗口大小
+            defaults write com.googlecode.iterm2 "New Bookmarks":0:"Columns" -int 120
+            defaults write com.googlecode.iterm2 "New Bookmarks":0:"Rows" -int 30
+            
+            echo "iTerm2 安装完成，建议重启 iTerm2 使配置生效"
+        fi
+    else
+        echo "iTerm2 已安装"
+    fi
+fi
+
 # 检查程序是否已安装的函数
 check_installed() {
     if command -v "$1" &> /dev/null; then
@@ -193,6 +230,100 @@ echo "检查 trxx..."
 if ! check_installed trxx; then
     echo "安装 trxx..."
     cargo install trxx || echo "警告: trxx 安装失败"
+fi
+
+# 在 macOS 上安装和配置 oh-my-zsh
+if [ "$OS" = "Darwin" ]; then
+    echo "检查并配置 oh-my-zsh..."
+    
+    # 检查是否已安装 oh-my-zsh
+    if [ ! -d "$HOME/.oh-my-zsh" ]; then
+        echo "安装 oh-my-zsh..."
+        sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended || {
+            echo "警告: oh-my-zsh 安装失败"
+        }
+    else
+        echo "oh-my-zsh 已安装"
+    fi
+
+    # 安装 autojump 插件
+    echo "检查 autojump..."
+    if ! brew list autojump &>/dev/null; then
+        echo "安装 autojump..."
+        brew install autojump || echo "警告: autojump 安装失败"
+    fi
+
+    # 安装 zsh-syntax-highlighting
+    echo "检查 zsh-syntax-highlighting..."
+    if [ ! -d "${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting" ]; then
+        echo "安装 zsh-syntax-highlighting..."
+        git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting || echo "警告: zsh-syntax-highlighting 安装失败"
+    fi
+
+    # 安装 zsh-autosuggestions
+    echo "检查 zsh-autosuggestions..."
+    if [ ! -d "${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" ]; then
+        echo "安装 zsh-autosuggestions..."
+        git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions || echo "警告: zsh-autosuggestions 安装失败"
+    fi
+
+    # 配置 .zshrc
+    echo "配置 .zshrc..."
+    ZSHRC="$HOME/.zshrc"
+    
+    # 备份原始 .zshrc
+    if [ -f "$ZSHRC" ]; then
+        cp "$ZSHRC" "${ZSHRC}.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
+
+    # 创建新的 .zshrc 配置
+    cat > "$ZSHRC" << 'EOL'
+# Path to your oh-my-zsh installation.
+export ZSH="$HOME/.oh-my-zsh"
+
+# Set name of the theme
+ZSH_THEME="robbyrussell"
+
+# 启用的插件
+plugins=(
+    git
+    autojump
+    zsh-syntax-highlighting
+    zsh-autosuggestions
+)
+
+source $ZSH/oh-my-zsh.sh
+
+# autojump 配置
+[[ -s $(brew --prefix)/etc/profile.d/autojump.sh ]] && . $(brew --prefix)/etc/profile.d/autojump.sh
+
+# 常用别名配置
+alias ll='ls -al'
+alias la='ls -a'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ga='git add'
+alias gc='git commit'
+alias gco='git checkout'
+alias gst='git status'
+alias gp='git push'
+alias gpl='git pull'
+
+# 加载 zsh-syntax-highlighting
+source ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
+# 加载 zsh-autosuggestions
+source ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+EOL
+
+    # 设置 zsh 为默认 shell
+    if [ "$SHELL" != "/bin/zsh" ]; then
+        echo "设置 zsh 为默认 shell..."
+        chsh -s /bin/zsh || echo "警告: 设置默认 shell 失败"
+    fi
+
+    echo "oh-my-zsh 配置完成！"
+    echo "请重新打开终端或执行 'source ~/.zshrc' 使配置生效"
 fi
 
 # 显示安装的版本信息
